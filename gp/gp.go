@@ -4,6 +4,9 @@
 package gp
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/pkg/errors"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
@@ -13,8 +16,12 @@ import (
 type GP struct {
 	inputs  [][]float64
 	outputs []float64
-	cov     Cov
-	noise   float64
+
+	inputNames []string
+	outputName string
+
+	cov   Cov
+	noise float64
 
 	alpha        *mat.VecDense
 	l            *mat.Cholesky
@@ -29,6 +36,25 @@ func New(cov Cov, noise float64) *GP {
 		cov:   cov,
 		noise: noise,
 	}
+}
+
+func (gp *GP) SetNames(inputs []string, output string) {
+	gp.inputNames = inputs
+	gp.outputName = output
+}
+
+func (gp GP) Name(i int) string {
+	if len(gp.inputNames) > i {
+		return gp.inputNames[i]
+	}
+	return fmt.Sprintf("x[%d]", i)
+}
+
+func (gp GP) OutputName() string {
+	if len(gp.outputName) > 0 {
+		return gp.outputName
+	}
+	return "y"
 }
 
 func (gp GP) RawData() ([][]float64, []float64) {
@@ -92,7 +118,7 @@ func (gp *GP) normOutputs() []float64 {
 	return out
 }
 
-// Estimate returns the mean and variance at the point x.
+// Estimate returns the mean and standard deviation at the point x.
 func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	if gp.dirty {
 		if err := gp.compute(); err != nil {
@@ -100,15 +126,19 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 		}
 	}
 	n := len(gp.inputs)
+
 	kstar := mat.NewVecDense(n, nil)
 	for i := 0; i < n; i++ {
 		kstar.SetVec(i, gp.cov(gp.inputs[i], x))
 	}
 	mean := mat.Dot(kstar, gp.alpha)*gp.stddev + gp.mean
+
 	v := mat.NewVecDense(n, nil)
 	if err := gp.l.SolveVec(v, kstar); err != nil {
 		return 0, 0, err
 	}
-	variance := gp.cov(x, x) - mat.Dot(v, v)
-	return mean, variance, nil
+	variance := gp.cov(x, x) - mat.Dot(kstar, v)
+	sd := math.Sqrt(variance)
+
+	return mean, sd, nil
 }

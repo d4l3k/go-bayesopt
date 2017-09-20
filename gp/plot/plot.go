@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
-	"math"
 	"os"
 	"path"
 	"sort"
@@ -26,7 +24,7 @@ func SaveAll(gp *gp.GP) (string, error) {
 	}
 	dims := gp.Dims()
 	for i := 0; i < dims; i++ {
-		name := fmt.Sprintf("%d.svg", i)
+		name := fmt.Sprintf("%d.png", i)
 		fpath := path.Join(dir, name)
 		f, err := os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0755)
 		if err != nil {
@@ -37,7 +35,6 @@ func SaveAll(gp *gp.GP) (string, error) {
 			return "", err
 		}
 		f.Close()
-		log.Printf("%d: %s", i, fpath)
 	}
 	return dir, nil
 }
@@ -73,24 +70,25 @@ func GP(gp *gp.GP, w io.Writer, dim int) error {
 		knownY[i] = p.y
 	}
 
-	const padding = 20
-
 	graph := chart.Chart{
-		Title: fmt.Sprintf("Gaussian Process: Dimension %d/%d", dim, dims),
+		Title:      fmt.Sprintf("%s vs. %s", gp.Name(dim), gp.OutputName()),
+		TitleStyle: chart.StyleShow(),
 		XAxis: chart.XAxis{
-			Style: chart.Style{
-				Show: true,
-			},
+			Name:      gp.Name(dim),
+			NameStyle: chart.StyleShow(),
+			Style:     chart.StyleShow(),
 		},
 		YAxis: chart.YAxis{
-			Style: chart.Style{
-				Show: true,
-			},
+			Name:      gp.OutputName(),
+			NameStyle: chart.StyleShow(),
+			Style:     chart.StyleShow(),
 		},
 		Background: chart.Style{
 			Padding: chart.Box{
-				Top:  padding,
-				Left: padding,
+				Top:    20,
+				Left:   20,
+				Bottom: 20,
+				Right:  20,
 			},
 		},
 	}
@@ -124,28 +122,20 @@ outer:
 			}
 			lowerPair = pairs[pairI]
 			upperPair = pairs[pairI+1]
-			log.Printf("j %d, xi %f, %+v %+v", j, xi, upperPair, lowerPair)
 		}
 
 		mid := (xi - lowerPair.x[dim]) / (upperPair.x[dim] - lowerPair.x[dim])
 		args := make([]float64, dims)
 		floats.AddScaled(args, 1-mid, lowerPair.x)
 		floats.AddScaled(args, mid, upperPair.x)
-		mean, variance, err := gp.Estimate(args)
+		mean, sd, err := gp.Estimate(args)
 		if err != nil {
 			return err
 		}
 		means[j] = mean
-		sd := math.Sqrt(math.Abs(variance))
-		log.Printf("sd %f, var %f, mean %f", sd, variance, mean)
-		if variance < 0 {
-			sd = -sd
-		}
 		uppers[j] = mean + sd
 		lowers[j] = mean - sd
 	}
-
-	log.Println(x, means, uppers, lowers)
 
 	graph.Series = append(
 		graph.Series,
@@ -155,12 +145,12 @@ outer:
 			YValues: means,
 		},
 		chart.ContinuousSeries{
-			Name:    "+σ = 1",
+			Name:    "+1σ",
 			XValues: x,
 			YValues: uppers,
 		},
 		chart.ContinuousSeries{
-			Name:    "-σ = 1",
+			Name:    "-1σ",
 			XValues: x,
 			YValues: lowers,
 		},
@@ -180,7 +170,7 @@ outer:
 		},
 	)
 
-	if err := graph.Render(chart.SVG, w); err != nil {
+	if err := graph.Render(chart.PNG, w); err != nil {
 		return err
 	}
 	return nil
