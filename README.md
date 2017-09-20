@@ -1,4 +1,4 @@
-# go-bayesopt [![Build Status](https://travis-ci.org/d4l3k/go-bayesopt.svg?branch=master)](https://travis-ci.org/d4l3k/go-bayesopt)
+# go-bayesopt [![Build Status](https://travis-ci.org/d4l3k/go-bayesopt.svg?branch=master)](https://travis-ci.org/d4l3k/go-bayesopt) [![GoDoc](https://godoc.org/github.com/d4l3k/go-bayesopt?status.svg)](https://godoc.org/github.com/d4l3k/go-bayesopt)
 
 A library for doing Bayesian Optimization using Gaussian Processes (blackbox optimizer) in Go/Golang.
 
