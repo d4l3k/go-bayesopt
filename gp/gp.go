@@ -31,6 +31,25 @@ func New(cov Cov, noise float64) *GP {
 	}
 }
 
+func (gp GP) RawData() ([][]float64, []float64) {
+	inputs := make([][]float64, len(gp.inputs))
+	for i, s := range gp.inputs {
+		input := make([]float64, len(s))
+		copy(input, s)
+		inputs[i] = input
+	}
+	outputs := make([]float64, len(gp.outputs))
+	copy(outputs, gp.outputs)
+	return inputs, outputs
+}
+
+func (gp GP) Dims() int {
+	if len(gp.inputs) > 0 {
+		return len(gp.inputs[0])
+	}
+	return 0
+}
+
 // Add bulk adds XY pairs.
 func (gp *GP) Add(x []float64, y float64) {
 	gp.dirty = true
@@ -85,7 +104,7 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	for i := 0; i < n; i++ {
 		kstar.SetVec(i, gp.cov(gp.inputs[i], x))
 	}
-	mean := (mat.Dot(kstar, gp.alpha) + gp.mean) * gp.stddev
+	mean := mat.Dot(kstar, gp.alpha)*gp.stddev + gp.mean
 	v := mat.NewVecDense(n, nil)
 	if err := gp.l.SolveVec(v, kstar); err != nil {
 		return 0, 0, err

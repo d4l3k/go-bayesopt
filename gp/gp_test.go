@@ -1,20 +1,32 @@
-package gp
+package gp_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/d4l3k/go-bayesopt/gp"
+	"github.com/d4l3k/go-bayesopt/gp/plot"
+	"github.com/gonum/floats"
+)
 
 func TestKnown(t *testing.T) {
-	gp := New(MaternCov, 0)
+	gp := gp.New(gp.MaternCov, 0)
 	gp.Add([]float64{1}, 1)
-	//gp.Add([]float64{1}, 1)
-	//gp.Add([]float64{2}, 2)
+	gp.Add([]float64{2}, 2)
+	gp.Add([]float64{3}, 3)
+	gp.Add([]float64{4}, 4)
+	gp.Add([]float64{5}, 5)
+	gp.Add([]float64{10}, 10)
+	if _, err := plot.SaveAll(gp); err != nil {
+		t.Fatal(err)
+	}
 	mean, variance, err := gp.Estimate([]float64{1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mean != 1 {
+	if !floats.EqualWithinAbs(mean, 1, 0.0001) {
 		t.Fatalf("got mean = %f; not 1", mean)
 	}
-	if variance != 0 {
+	if !floats.EqualWithinAbs(variance, 0, 0.0001) {
 		t.Fatalf("got variance = %f; not 0", variance)
 	}
 }
