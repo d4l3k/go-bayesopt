@@ -39,7 +39,8 @@ type Optimizer struct {
 		exploration                 Exploration
 		minimize                    bool
 
-		running bool
+		running        bool
+		explorationErr error
 	}
 }
 
@@ -146,7 +147,7 @@ func (f randerFunc) Rand(x []float64) []float64 {
 	return f(x)
 }
 
-func IsFatalErr(err error) bool {
+func isFatalErr(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -178,7 +179,9 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	if o.mu.round >= o.mu.rounds {
+	// Return if we've exceeded max # of rounds, or if there was an error while
+	// doing exploration which is likely caused by numerical precision errors.
+	if o.mu.round >= o.mu.rounds || o.mu.explorationErr != nil {
 		return nil, false, nil
 	}
 
@@ -222,7 +225,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		return nil, false, errors.Wrapf(err, "random sample failed")
 	}
 	if fErr != nil {
-		return nil, false, fErr
+		o.mu.explorationErr = fErr
 	}
 	min := result.F
 	minX := result.X
@@ -232,11 +235,11 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	// TODO(d4l3k): Bounded line searcher.
 	{
 		result, err := optimize.Local(problem, minX, nil, &grad)
-		if IsFatalErr(err) {
-			return nil, false, errors.Wrapf(err, "random sample optimize failed")
+		if isFatalErr(err) {
+			o.mu.explorationErr = errors.Wrapf(err, "random sample optimize failed")
 		}
 		if fErr != nil {
-			return nil, false, fErr
+			o.mu.explorationErr = fErr
 		}
 		if result != nil && result.F < min {
 			min = result.F
@@ -248,16 +251,20 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	for i := 0; i < NumGradPoints; i++ {
 		x := sampleParams(o.mu.params)
 		result, err := optimize.Local(problem, x, nil, &grad)
-		if IsFatalErr(err) {
-			return nil, false, errors.Wrapf(err, "gradient descent failed: i %d, x %+v, result%+v", i, x, result)
+		if isFatalErr(err) {
+			o.mu.explorationErr = errors.Wrapf(err, "gradient descent failed: i %d, x %+v, result%+v", i, x, result)
 		}
 		if fErr != nil {
-			return nil, false, fErr
+			o.mu.explorationErr = fErr
 		}
 		if result != nil && result.F < min {
 			min = result.F
 			minX = result.X
 		}
+	}
+
+	if o.mu.explorationErr != nil {
+		return nil, false, nil
 	}
 
 	m := map[Param]float64{}
@@ -267,6 +274,13 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 
 	o.mu.round += 1
 	return m, false, nil
+}
+
+func (o *Optimizer) ExplorationErr() error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return o.mu.explorationErr
 }
 
 func (o *Optimizer) Log(x map[Param]float64, y float64) {
@@ -282,11 +296,11 @@ func (o *Optimizer) Log(x map[Param]float64, y float64) {
 
 // Optimize will call f the fewest times as possible while trying to maximize
 // the output value. It blocks until all rounds have elapsed, or Stop is called.
-func (o *Optimizer) Optimize(f func(map[Param]float64) float64) error {
+func (o *Optimizer) Optimize(f func(map[Param]float64) float64) (x map[Param]float64, y float64, err error) {
 	o.mu.Lock()
 	if o.mu.running {
 		o.mu.Unlock()
-		return errors.New("optimizer is already running")
+		return nil, 0, errors.New("optimizer is already running")
 	}
 	o.mu.running = true
 	o.mu.Unlock()
@@ -294,12 +308,12 @@ func (o *Optimizer) Optimize(f func(map[Param]float64) float64) error {
 	var wg sync.WaitGroup
 	for {
 		if !o.Running() {
-			return errors.New("optimizer got stop signal")
+			return nil, 0, errors.New("optimizer got stop signal")
 		}
 
 		x, parallel, err := o.Next()
 		if err != nil {
-			return errors.Wrapf(err, "failed to get next point")
+			return nil, 0, errors.Wrapf(err, "failed to get next point")
 		}
 		if x == nil {
 			break
@@ -321,7 +335,18 @@ func (o *Optimizer) Optimize(f func(map[Param]float64) float64) error {
 	o.mu.running = false
 	o.mu.Unlock()
 
-	return nil
+	var xa []float64
+	if o.mu.minimize {
+		xa, y = o.mu.gp.Minimum()
+	} else {
+		xa, y = o.mu.gp.Maximum()
+	}
+	x = map[Param]float64{}
+	for i, v := range xa {
+		x[o.mu.params[i]] = v
+	}
+
+	return x, y, nil
 }
 
 // Stop stops Optimize.

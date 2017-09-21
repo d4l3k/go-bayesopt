@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/d4l3k/go-bayesopt/gp/plot"
+	"gonum.org/v1/gonum/floats"
 )
 
 func TestOptimizer(t *testing.T) {
@@ -17,23 +18,33 @@ func TestOptimizer(t *testing.T) {
 			X,
 		},
 	)
-	err := o.Optimize(func(params map[Param]float64) float64 {
-		return math.Pow(params[X], 2)
+	x, y, err := o.Optimize(func(params map[Param]float64) float64 {
+		return math.Pow(params[X], 2) + 1
 	})
+	if err != nil {
+		t.Errorf("%+v", err)
+	}
 
-	t.Log("done")
-
-	x, y := o.GP().RawData()
-	t.Logf("x %+v\ny %+v", x, y)
+	{
+		x, y := o.GP().RawData()
+		t.Logf("x %+v\ny %+v", x, y)
+	}
 	if _, err := plot.SaveAll(o.GP()); err != nil {
 		t.Errorf("plot error: %+v", err)
 	}
 
-	if err != nil {
-		t.Logf("%+v", err)
+	{
+		got := x[X]
+		want := 0.0
+		if !floats.EqualWithinAbs(got, want, 0.0001) {
+			t.Errorf("got x = %f; not %f", got, want)
+		}
 	}
-
-	if IsFatalErr(err) {
-		t.Fatalf("%+v", err)
+	{
+		got := y
+		want := 1.0
+		if !floats.EqualWithinAbs(got, want, 0.0001) {
+			t.Errorf("got x = %f; not %f", got, want)
+		}
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"math"
 
 	"github.com/pkg/errors"
+
+	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 )
@@ -159,4 +161,16 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	sd := math.Sqrt(variance)
 
 	return mean, sd, nil
+}
+
+// Minimum returns the minimum value logged.
+func (gp *GP) Minimum() (x []float64, y float64) {
+	i := floats.MinIdx(gp.outputs)
+	return gp.inputs[i], gp.outputs[i]
+}
+
+// Maximum returns the maximum value logged.
+func (gp *GP) Maximum() (x []float64, y float64) {
+	i := floats.MaxIdx(gp.outputs)
+	return gp.inputs[i], gp.outputs[i]
 }
