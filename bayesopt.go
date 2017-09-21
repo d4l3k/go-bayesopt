@@ -1,13 +1,15 @@
 package bayesopt
 
 import (
-	"errors"
 	"log"
 	"sync"
 
-	"github.com/d4l3k/go-bayesopt/gp"
-	"github.com/gonum/optimize"
+	"github.com/pkg/errors"
+
 	"gonum.org/v1/gonum/diff/fd"
+	"gonum.org/v1/gonum/optimize"
+
+	"github.com/d4l3k/go-bayesopt/gp"
 )
 
 const (
@@ -15,6 +17,8 @@ const (
 	DefaultRounds = 20
 	// DefaultRandomRounds is the default number of random rounds to run.
 	DefaultRandomRounds = 5
+	// DefaultMinimize is the default value of minimize.
+	DefaultMinimize = true
 
 	NumRandPoints = 100000
 	NumGradPoints = 256
@@ -33,6 +37,7 @@ type Optimizer struct {
 		params                      []Param
 		round, randomRounds, rounds int
 		exploration                 Exploration
+		minimize                    bool
 
 		running bool
 	}
@@ -70,6 +75,12 @@ func WithExploration(exploration Exploration) OptimizerOption {
 	}
 }
 
+func WithMinimize(minimize bool) OptimizerOption {
+	return func(o *Optimizer) {
+		o.mu.minimize = minimize
+	}
+}
+
 // New creates a new optimizer with the specified optimizable parameters and
 // options.
 func New(params []Param, opts ...OptimizerOption) *Optimizer {
@@ -81,6 +92,7 @@ func New(params []Param, opts ...OptimizerOption) *Optimizer {
 	o.mu.randomRounds = DefaultRandomRounds
 	o.mu.rounds = DefaultRounds
 	o.mu.exploration = DefaultExploration
+	o.mu.minimize = DefaultMinimize
 
 	o.updateNames("")
 
@@ -134,6 +146,31 @@ func (f randerFunc) Rand(x []float64) []float64 {
 	return f(x)
 }
 
+func IsFatalErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Only recurse 100 times before breaking.
+	for i := 0; i < 100; i++ {
+		parent := errors.Cause(err)
+		if parent == err {
+			break
+		}
+		err = parent
+	}
+
+	if _, ok := err.(optimize.ErrFunc); ok {
+		return false
+	}
+	switch err {
+	case optimize.ErrLinesearcherFailure, optimize.ErrNoProgress:
+		return false
+	default:
+		return true
+	}
+}
+
 // Next returns the next best x values to explore. If more than rounds have
 // elapsed, nil is returned. If parallel is true, that round can happen in
 // parallel to other rounds.
@@ -145,19 +182,26 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		return nil, false, nil
 	}
 
+	log.Printf("Round %d", o.mu.round)
+
 	// If we don't have enough random rounds, run more.
 	if o.mu.round < o.mu.randomRounds {
 		x = sampleParamsMap(o.mu.params)
 		o.mu.round += 1
-		return x, true, nil
+		// Don't return parallel on the last random round.
+		return x, o.mu.round != o.mu.randomRounds, nil
 	}
 
+	var fErr error
 	f := func(x []float64) float64 {
-		v, err := o.mu.exploration.Estimate(o.mu.gp, x)
+		v, err := o.mu.exploration.Estimate(o.mu.gp, o.mu.minimize, x)
 		if err != nil {
-			log.Printf("error %+v", err)
+			fErr = errors.Wrap(err, "exploration error")
 		}
-		return v
+		if o.mu.minimize {
+			return v
+		}
+		return -v
 	}
 	problem := optimize.Problem{
 		Func: f,
@@ -175,19 +219,26 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		}),
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, false, errors.Wrapf(err, "random sample failed")
+	}
+	if fErr != nil {
+		return nil, false, fErr
 	}
 	min := result.F
 	minX := result.X
 
 	// Run gradient descent on the best point.
 	grad := optimize.LBFGS{}
+	// TODO(d4l3k): Bounded line searcher.
 	{
 		result, err := optimize.Local(problem, minX, nil, &grad)
-		if err != nil {
-			return nil, false, err
+		if IsFatalErr(err) {
+			return nil, false, errors.Wrapf(err, "random sample optimize failed")
 		}
-		if result.F < min {
+		if fErr != nil {
+			return nil, false, fErr
+		}
+		if result != nil && result.F < min {
 			min = result.F
 			minX = result.X
 		}
@@ -197,10 +248,13 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	for i := 0; i < NumGradPoints; i++ {
 		x := sampleParams(o.mu.params)
 		result, err := optimize.Local(problem, x, nil, &grad)
-		if err != nil {
-			return nil, false, err
+		if IsFatalErr(err) {
+			return nil, false, errors.Wrapf(err, "gradient descent failed: i %d, x %+v, result%+v", i, x, result)
 		}
-		if result.F < min {
+		if fErr != nil {
+			return nil, false, fErr
+		}
+		if result != nil && result.F < min {
 			min = result.F
 			minX = result.X
 		}
@@ -211,6 +265,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		m[o.mu.params[i]] = x
 	}
 
+	o.mu.round += 1
 	return m, false, nil
 }
 
@@ -244,7 +299,7 @@ func (o *Optimizer) Optimize(f func(map[Param]float64) float64) error {
 
 		x, parallel, err := o.Next()
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "failed to get next point")
 		}
 		if x == nil {
 			break

@@ -12,6 +12,8 @@ import (
 	"gonum.org/v1/gonum/stat"
 )
 
+var ErrFactorizeFailed = errors.New("failed to factorize")
+
 // GP represents a gaussian process.
 type GP struct {
 	inputs  [][]float64
@@ -26,7 +28,9 @@ type GP struct {
 	alpha        *mat.VecDense
 	l            *mat.Cholesky
 	mean, stddev float64
-	dirty        bool
+
+	n     int
+	dirty bool
 }
 
 // New creates a new Gaussian process with the specified covariance function
@@ -45,7 +49,10 @@ func (gp *GP) SetNames(inputs []string, output string) {
 
 func (gp GP) Name(i int) string {
 	if len(gp.inputNames) > i {
-		return gp.inputNames[i]
+		name := gp.inputNames[i]
+		if len(name) > 0 {
+			return name
+		}
 	}
 	return fmt.Sprintf("x[%d]", i)
 }
@@ -83,7 +90,16 @@ func (gp *GP) Add(x []float64, y float64) {
 	gp.outputs = append(gp.outputs, y)
 }
 
+func isConditionErr(err error) bool {
+	_, ok := err.(mat.Condition)
+	return ok
+}
+
 func (gp *GP) compute() error {
+	defer func() {
+		gp.dirty = false
+	}()
+
 	n := len(gp.inputs)
 	k := mat.NewSymDense(n, nil)
 	for i := 0; i < n; i++ {
@@ -97,15 +113,17 @@ func (gp *GP) compute() error {
 	}
 	var L mat.Cholesky
 	if ok := L.Factorize(k); !ok {
-		return errors.Errorf("failed to factorize")
+		return errors.Wrap(ErrFactorizeFailed, "compute")
 	}
 	b := mat.NewVecDense(n, gp.normOutputs())
-	gp.alpha = mat.NewVecDense(n, nil)
-	if err := L.SolveVec(gp.alpha, b); err != nil {
-		return err
+	alpha := mat.NewVecDense(n, nil)
+	if err := L.SolveVec(alpha, b); err != nil && !isConditionErr(err) {
+		return errors.Wrap(err, "failed to solve for alpha")
 	}
+
+	gp.alpha = alpha
 	gp.l = &L
-	gp.dirty = false
+	gp.n = n
 	return nil
 }
 
@@ -122,10 +140,10 @@ func (gp *GP) normOutputs() []float64 {
 func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	if gp.dirty {
 		if err := gp.compute(); err != nil {
-			return 0, 0, err
+			return 0, 0, errors.Wrap(err, "failed to run compute")
 		}
 	}
-	n := len(gp.inputs)
+	n := gp.n
 
 	kstar := mat.NewVecDense(n, nil)
 	for i := 0; i < n; i++ {
@@ -134,8 +152,8 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	mean := mat.Dot(kstar, gp.alpha)*gp.stddev + gp.mean
 
 	v := mat.NewVecDense(n, nil)
-	if err := gp.l.SolveVec(v, kstar); err != nil {
-		return 0, 0, err
+	if err := gp.l.SolveVec(v, kstar); err != nil && !isConditionErr(err) {
+		return 0, 0, errors.Wrap(err, "failed to find v")
 	}
 	variance := gp.cov(x, x) - mat.Dot(kstar, v)
 	sd := math.Sqrt(variance)

@@ -3,7 +3,7 @@ package gp
 import (
 	"math"
 
-	"github.com/gonum/floats"
+	"gonum.org/v1/gonum/floats"
 )
 
 // Cov calculates the covariance between a and b.

@@ -8,9 +8,10 @@ import (
 	"path"
 	"sort"
 
-	"github.com/gonum/floats"
 	"github.com/pkg/errors"
 	"github.com/wcharczuk/go-chart"
+
+	"gonum.org/v1/gonum/floats"
 
 	"github.com/d4l3k/go-bayesopt/gp"
 )
@@ -24,7 +25,7 @@ func SaveAll(gp *gp.GP) (string, error) {
 	}
 	dims := gp.Dims()
 	for i := 0; i < dims; i++ {
-		name := fmt.Sprintf("%d.png", i)
+		name := fmt.Sprintf("%d.svg", i)
 		fpath := path.Join(dir, name)
 		f, err := os.OpenFile(fpath, os.O_CREATE|os.O_WRONLY, 0755)
 		if err != nil {
@@ -170,7 +171,7 @@ outer:
 		},
 	)
 
-	if err := graph.Render(chart.PNG, w); err != nil {
+	if err := graph.Render(chart.SVG, w); err != nil {
 		return err
 	}
 	return nil
