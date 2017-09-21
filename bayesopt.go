@@ -1,7 +1,6 @@
 package bayesopt
 
 import (
-	"log"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -27,6 +26,8 @@ const (
 var (
 	// DefaultExploration uses UCB with 95 confidence interval.
 	DefaultExploration = UCB{Kappa: 1.96}
+	// DefaultBarrierFunc sets the default barrier function to use.
+	DefaultBarrierFunc = LogBarrier
 )
 
 // Optimizer is a blackbox gaussian process optimizer.
@@ -38,6 +39,7 @@ type Optimizer struct {
 		round, randomRounds, rounds int
 		exploration                 Exploration
 		minimize                    bool
+		barrierFunc                 BarrierFunc
 
 		running        bool
 		explorationErr error
@@ -76,9 +78,18 @@ func WithExploration(exploration Exploration) OptimizerOption {
 	}
 }
 
+// WithMinimize sets whether or not to minimize. Passing false, maximizes
+// instead.
 func WithMinimize(minimize bool) OptimizerOption {
 	return func(o *Optimizer) {
 		o.mu.minimize = minimize
+	}
+}
+
+// WithBarrierFunc sets the barrier function to use.
+func WithBarrierFunc(bf BarrierFunc) OptimizerOption {
+	return func(o *Optimizer) {
+		o.mu.barrierFunc = bf
 	}
 }
 
@@ -94,6 +105,7 @@ func New(params []Param, opts ...OptimizerOption) *Optimizer {
 	o.mu.rounds = DefaultRounds
 	o.mu.exploration = DefaultExploration
 	o.mu.minimize = DefaultMinimize
+	o.mu.barrierFunc = DefaultBarrierFunc
 
 	o.updateNames("")
 
@@ -185,8 +197,6 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		return nil, false, nil
 	}
 
-	log.Printf("Round %d", o.mu.round)
-
 	// If we don't have enough random rounds, run more.
 	if o.mu.round < o.mu.randomRounds {
 		x = sampleParamsMap(o.mu.params)
@@ -201,6 +211,8 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		if err != nil {
 			fErr = errors.Wrap(err, "exploration error")
 		}
+		v += o.mu.barrierFunc(x, o.mu.params)
+
 		if o.mu.minimize {
 			return v
 		}
@@ -363,4 +375,12 @@ func (o *Optimizer) Running() bool {
 	defer o.mu.Unlock()
 
 	return o.mu.running
+}
+
+// Rounds is the number of rounds that have been run.
+func (o *Optimizer) Rounds() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	return o.mu.round
 }

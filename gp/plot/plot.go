@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"sort"
@@ -100,10 +101,10 @@ func GP(gp *gp.GP, w io.Writer, dim int) error {
 	max := floats.Max(knownX)
 	min := floats.Min(knownX)
 	const steps = chart.DefaultChartWidth
-	x := make([]float64, steps)
-	means := make([]float64, steps)
-	uppers := make([]float64, steps)
-	lowers := make([]float64, steps)
+	x := make([]float64, 0, steps)
+	means := make([]float64, 0, steps)
+	uppers := make([]float64, 0, steps)
+	lowers := make([]float64, 0, steps)
 	stepSize := (max - min) / steps
 
 	pairI := 0
@@ -111,7 +112,7 @@ func GP(gp *gp.GP, w io.Writer, dim int) error {
 outer:
 	for j := range x {
 		xi := stepSize*float64(j) + min
-		x[j] = xi
+		x = append(x, xi)
 
 		var lowerPair, upperPair pair
 		for upperPair.x == nil || upperPair.x[dim] < xi {
@@ -133,9 +134,14 @@ outer:
 		if err != nil {
 			return err
 		}
-		means[j] = mean
-		uppers[j] = mean + sd
-		lowers[j] = mean - sd
+
+		if math.IsNaN(mean) || math.IsNaN(sd) {
+			continue
+		}
+
+		means = append(means, mean)
+		uppers = append(uppers, mean+sd)
+		lowers = append(lowers, mean-sd)
 	}
 
 	graph.Series = append(
