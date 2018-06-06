@@ -30,7 +30,10 @@ func (e UCB) Estimate(gp *gp.GP, minimize bool, x []float64) (float64, error) {
 
 // BarrierFunc returns a value that is added to the value to bound the
 // optimization.
-type BarrierFunc func(x []float64, params []Param) float64
+type BarrierFunc interface {
+	Val(x []float64, params []Param) float64
+	Grad(x []float64, params []Param) []float64
+}
 
 // BasicBarrier returns -Inf if an x value is outside the param range.
 func BasicBarrier(x []float64, params []Param) float64 {
@@ -44,7 +47,10 @@ func BasicBarrier(x []float64, params []Param) float64 {
 }
 
 // LogBarrier implements a logarithmic barrier function.
-func LogBarrier(x []float64, params []Param) float64 {
+type LogBarrier struct{}
+
+// Val returns the value of the barrier function.
+func (LogBarrier) Val(x []float64, params []Param) float64 {
 	v := 0.0
 	for i, p := range params {
 		v += math.Log2(p.GetMax() - x[i])
@@ -54,4 +60,14 @@ func LogBarrier(x []float64, params []Param) float64 {
 		return math.Inf(-1)
 	}
 	return v
+}
+
+// Grad returns the gradient of the barrier function.
+func (LogBarrier) Grad(x []float64, params []Param) []float64 {
+	grad := make([]float64, len(x))
+	for i, p := range params {
+		grad[i] = 1/(x[i]-p.GetMin()) - 1/(p.GetMax()-x[i])
+		// TODO handle NaN
+	}
+	return grad
 }

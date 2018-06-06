@@ -20,7 +20,7 @@ func gpAdd(gp *gp.GP, x, y float64) {
 }
 
 func TestKnown(t *testing.T) {
-	gp := gp.New(gp.MaternCov, 0)
+	gp := gp.New(gp.MaternCov{}, 0)
 
 	gpAdd(gp, 0.25, 0.75)
 

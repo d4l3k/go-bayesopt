@@ -27,7 +27,7 @@ func TestMaternCov(t *testing.T) {
 		},
 	}
 	for i, c := range cases {
-		out := MaternCov(c.a, c.b)
+		out := MaternCov{}.Cov(c.a, c.b)
 		if math.Abs(out-c.want) > 0.00001 {
 			t.Errorf("%d. MaternCov(%+v, %+v) = %f; not %f", i, c.a, c.b, out, c.want)
 		}

@@ -11,7 +11,7 @@ import (
 )
 
 func TestPlot(t *testing.T) {
-	gp := gp.New(gp.MaternCov, 0)
+	gp := gp.New(gp.MaternCov{}, 0)
 	gp.Add([]float64{1, 5}, 1)
 	gp.Add([]float64{2, 4}, 2)
 	gp.Add([]float64{3, 3}, 3)

@@ -5,7 +5,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"gonum.org/v1/gonum/diff/fd"
 	"gonum.org/v1/gonum/optimize"
 
 	"github.com/d4l3k/go-bayesopt/gp"
@@ -27,7 +26,7 @@ var (
 	// DefaultExploration uses UCB with 95 confidence interval.
 	DefaultExploration = UCB{Kappa: 1.96}
 	// DefaultBarrierFunc sets the default barrier function to use.
-	DefaultBarrierFunc = LogBarrier
+	DefaultBarrierFunc = LogBarrier{}
 )
 
 // Optimizer is a blackbox gaussian process optimizer.
@@ -97,7 +96,7 @@ func WithBarrierFunc(bf BarrierFunc) OptimizerOption {
 // options.
 func New(params []Param, opts ...OptimizerOption) *Optimizer {
 	o := &Optimizer{}
-	o.mu.gp = gp.New(gp.MaternCov, 0)
+	o.mu.gp = gp.New(gp.MaternCov{}, 0)
 	o.mu.params = params
 
 	// Set default values.
@@ -211,7 +210,6 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 		if err != nil {
 			fErr = errors.Wrap(err, "exploration error")
 		}
-		v += o.mu.barrierFunc(x, o.mu.params)
 
 		if o.mu.minimize {
 			return v
@@ -221,7 +219,11 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	problem := optimize.Problem{
 		Func: f,
 		Grad: func(grad, x []float64) {
-			fd.Gradient(grad, f, x, nil)
+			g, err := o.mu.gp.Gradient(x)
+			if err != nil {
+				fErr = errors.Wrap(err, "gradient error")
+			}
+			copy(grad, g)
 		},
 	}
 
@@ -243,10 +245,14 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	minX := result.X
 
 	// Run gradient descent on the best point.
-	grad := optimize.LBFGS{}
+	method := optimize.LBFGS{}
+	grad := BoundsMethod{
+		Method: &method,
+		Bounds: o.mu.params,
+	}
 	// TODO(d4l3k): Bounded line searcher.
 	{
-		result, err := optimize.Local(problem, minX, nil, &grad)
+		result, err := optimize.Local(problem, minX, nil, grad)
 		if isFatalErr(err) {
 			o.mu.explorationErr = errors.Wrapf(err, "random sample optimize failed")
 		}
@@ -262,7 +268,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	// Attempt to use gradient descent on random points.
 	for i := 0; i < NumGradPoints; i++ {
 		x := sampleParams(o.mu.params)
-		result, err := optimize.Local(problem, x, nil, &grad)
+		result, err := optimize.Local(problem, x, nil, grad)
 		if isFatalErr(err) {
 			o.mu.explorationErr = errors.Wrapf(err, "gradient descent failed: i %d, x %+v, result%+v", i, x, result)
 		}

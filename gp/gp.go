@@ -106,7 +106,7 @@ func (gp *GP) compute() error {
 	k := mat.NewSymDense(n, nil)
 	for i := 0; i < n; i++ {
 		for j := i; j < n; j++ {
-			v := gp.cov(gp.inputs[i], gp.inputs[j])
+			v := gp.cov.Cov(gp.inputs[i], gp.inputs[j])
 			if i == j {
 				v += gp.noise
 			}
@@ -149,7 +149,7 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 
 	kstar := mat.NewVecDense(n, nil)
 	for i := 0; i < n; i++ {
-		kstar.SetVec(i, gp.cov(gp.inputs[i], x))
+		kstar.SetVec(i, gp.cov.Cov(gp.inputs[i], x))
 	}
 	mean := mat.Dot(kstar, gp.alpha)*gp.stddev + gp.mean
 
@@ -157,10 +157,31 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	if err := gp.l.SolveVec(v, kstar); err != nil && !isConditionErr(err) {
 		return 0, 0, errors.Wrap(err, "failed to find v")
 	}
-	variance := gp.cov(x, x) - mat.Dot(kstar, v)
+	variance := gp.cov.Cov(x, x) - mat.Dot(kstar, v)
 	sd := math.Sqrt(variance)
 
 	return mean, sd, nil
+}
+
+// Gradient returns the gradient of the mean at the point x.
+func (gp *GP) Gradient(x []float64) ([]float64, error) {
+	if gp.dirty {
+		if err := gp.compute(); err != nil {
+			return nil, errors.Wrap(err, "failed to run compute")
+		}
+	}
+	n := gp.n
+
+	kstar := mat.NewDense(len(x), n, nil)
+	for i := 0; i < n; i++ {
+		kstar.SetCol(i, gp.cov.Grad(gp.inputs[i], x))
+	}
+
+	grad := mat.NewVecDense(len(x), nil)
+	grad.MulVec(kstar, gp.alpha)
+	grad.ScaleVec(gp.stddev, grad)
+
+	return grad.RawVector().Data, nil
 }
 
 // Minimum returns the minimum value logged.
