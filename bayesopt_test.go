@@ -9,6 +9,8 @@ import (
 )
 
 func TestOptimizer(t *testing.T) {
+	t.Parallel()
+
 	X := LinearParam{
 		Max: 10,
 		Min: -10,
@@ -50,6 +52,8 @@ func TestOptimizer(t *testing.T) {
 }
 
 func TestOptimizerMax(t *testing.T) {
+	t.Parallel()
+
 	X := LinearParam{
 		Max: 10,
 		Min: -10,
@@ -95,6 +99,8 @@ func TestOptimizerMax(t *testing.T) {
 }
 
 func TestOptimizerBounds(t *testing.T) {
+	t.Parallel()
+
 	X := LinearParam{
 		Max: 10,
 		Min: 5,
