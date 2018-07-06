@@ -44,6 +44,17 @@ func TestParams(t *testing.T) {
 			max:  10,
 			min:  0,
 		},
+		{
+			p: ExponentialParam{
+				Name: "exponential",
+				Max:  100,
+				Min:  10,
+				Rate: 10,
+			},
+			name: "exponential",
+			max:  100,
+			min:  10,
+		},
 	}
 
 	for i, c := range cases {

@@ -55,10 +55,9 @@ func (p UniformParam) Sample() float64 {
 
 var _ Param = NormalParam{}
 
-// NormalParam is a normally distributed parameter with Mean and StdDev between
-// Max and Min. The Max and Min parameters use discard sampling to find a point
-// between them. Set them to be math.Inf(1) and math.Inf(-1) to disable the
-// bounds.
+// NormalParam is a normally distributed parameter with Mean and StdDev.
+// The Max and Min parameters use discard sampling to find a point between them.
+// Set them to be math.Inf(1) and math.Inf(-1) to disable the bounds.
 type NormalParam struct {
 	Name         string
 	Max, Min     float64
@@ -84,6 +83,41 @@ func (p NormalParam) GetMin() float64 {
 func (p NormalParam) Sample() float64 {
 	return truncateSample(p, func() float64 {
 		return rand.NormFloat64()*p.StdDev + p.Mean
+	})
+}
+
+var _ Param = ExponentialParam{}
+
+// ExponentialParam is an exponentially distributed parameter between 0 and in
+// the range (0, +math.MaxFloat64] whose rate parameter (lambda) is Rate and
+// whose mean is 1/lambda (1).
+// The Max and Min parameters use discard sampling to find a point between them.
+// Set them to be math.Inf(1) and math.Inf(-1) to disable the bounds.
+type ExponentialParam struct {
+	Name     string
+	Max, Min float64
+	Rate     float64
+}
+
+// GetName implements Param.
+func (p ExponentialParam) GetName() string {
+	return p.Name
+}
+
+// GetMax implements Param.
+func (p ExponentialParam) GetMax() float64 {
+	return p.Max
+}
+
+// GetMin implements Param.
+func (p ExponentialParam) GetMin() float64 {
+	return p.Min
+}
+
+// Sample implements Param.
+func (p ExponentialParam) Sample() float64 {
+	return truncateSample(p, func() float64 {
+		return rand.ExpFloat64() / p.Rate
 	})
 }
 
