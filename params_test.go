@@ -6,9 +6,10 @@ func TestParams(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		p        Param
-		name     string
-		max, min float64
+		p         Param
+		name      string
+		max, min  float64
+		sampleMax float64
 	}{
 		{
 			p: UniformParam{
@@ -55,6 +56,25 @@ func TestParams(t *testing.T) {
 			max:  100,
 			min:  10,
 		},
+		{
+			p: RejectionParam{
+				Param: UniformParam{
+					Name: "rejection uniform",
+					Max:  100,
+					Min:  10,
+				},
+				F: func(x float64) float64 {
+					if x > 50 {
+						return 0
+					}
+					return 1
+				},
+			},
+			name:      "rejection uniform",
+			max:       100,
+			min:       10,
+			sampleMax: 50,
+		},
 	}
 
 	for i, c := range cases {
@@ -83,6 +103,9 @@ func TestParams(t *testing.T) {
 			sample := c.p.Sample()
 			if sample < c.min || sample > c.max {
 				t.Errorf("%d. %+v.Sample() = %v; outside bounds", i, c.p, sample)
+			}
+			if c.sampleMax != 0 && sample > c.sampleMax {
+				t.Errorf("%d. %+v.Sample() = %v; outside sample max %f", i, c.p, sample, c.sampleMax)
 			}
 		}
 	}

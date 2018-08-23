@@ -134,3 +134,25 @@ func truncateSample(p Param, f func() float64) float64 {
 	}
 	return math.Min(math.Max(sample, min), max)
 }
+
+// RejectionParam samples from Param and then uses F to decide whether or not to
+// reject the sample. This is typically used with a UniformParam. F should
+// output a value between 0 and 1 indicating the proportion of samples this
+// point should be accepted. If F always outputs 0, Sample will get stuck in an
+// infinite loop.
+type RejectionParam struct {
+	Param
+
+	F func(x float64) float64
+}
+
+// Sample implements Param.
+func (p RejectionParam) Sample() float64 {
+	for {
+		x := p.Param.Sample()
+		y := p.F(x)
+		if rand.Float64() < y {
+			return x
+		}
+	}
+}
