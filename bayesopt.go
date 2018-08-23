@@ -228,7 +228,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	}
 
 	// Randomly query a bunch of points to get a good estimate of maximum.
-	result, err := optimize.Global(problem, len(o.mu.params), &optimize.Settings{
+	result, err := optimize.Minimize(problem, make([]float64, len(o.mu.params)), &optimize.Settings{
 		FuncEvaluations: NumRandPoints,
 	}, &optimize.GuessAndCheck{
 		Rander: randerFunc(func(x []float64) []float64 {
@@ -252,7 +252,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	}
 	// TODO(d4l3k): Bounded line searcher.
 	{
-		result, err := optimize.Local(problem, minX, nil, grad)
+		result, err := optimize.Minimize(problem, minX, nil, grad)
 		if isFatalErr(err) {
 			o.mu.explorationErr = errors.Wrapf(err, "random sample optimize failed")
 		}
@@ -268,7 +268,7 @@ func (o *Optimizer) Next() (x map[Param]float64, parallel bool, err error) {
 	// Attempt to use gradient descent on random points.
 	for i := 0; i < NumGradPoints; i++ {
 		x := sampleParams(o.mu.params)
-		result, err := optimize.Local(problem, x, nil, grad)
+		result, err := optimize.Minimize(problem, x, nil, grad)
 		if isFatalErr(err) {
 			o.mu.explorationErr = errors.Wrapf(err, "gradient descent failed: i %d, x %+v, result%+v", i, x, result)
 		}
