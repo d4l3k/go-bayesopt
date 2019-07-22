@@ -8,7 +8,6 @@ import (
 	"math"
 
 	"github.com/pkg/errors"
-
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
@@ -119,7 +118,7 @@ func (gp *GP) compute() error {
 	}
 	b := mat.NewVecDense(n, gp.normOutputs())
 	alpha := mat.NewVecDense(n, nil)
-	if err := L.SolveVec(alpha, b); err != nil && !isConditionErr(err) {
+	if err := L.SolveVecTo(alpha, b); err != nil && !isConditionErr(err) {
 		return errors.Wrap(err, "failed to solve for alpha")
 	}
 
@@ -154,7 +153,7 @@ func (gp *GP) Estimate(x []float64) (float64, float64, error) {
 	mean := mat.Dot(kstar, gp.alpha)*gp.stddev + gp.mean
 
 	v := mat.NewVecDense(n, nil)
-	if err := gp.l.SolveVec(v, kstar); err != nil && !isConditionErr(err) {
+	if err := gp.l.SolveVecTo(v, kstar); err != nil && !isConditionErr(err) {
 		return 0, 0, errors.Wrap(err, "failed to find v")
 	}
 	variance := gp.cov.Cov(x, x) - mat.Dot(kstar, v)
