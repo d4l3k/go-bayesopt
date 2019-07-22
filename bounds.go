@@ -61,11 +61,8 @@ func (m BoundsMethod) Run(operation chan<- optimize.Task, result <-chan optimize
 	m.Method.Run(op, res, tasks)
 }
 
-func (m BoundsMethod) Needs() struct {
-	Gradient bool
-	Hessian  bool
-} {
-	return m.Method.Needs()
+func (m BoundsMethod) Uses(has optimize.Available) (uses optimize.Available, err error) {
+	return m.Method.Uses(has)
 }
 
 func (m BoundsMethod) Status() (optimize.Status, error) {
